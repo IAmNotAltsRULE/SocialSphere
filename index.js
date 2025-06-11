@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
@@ -6,6 +5,12 @@ const app = express();
 
 // Middleware
 app.use(express.json());
+
+// Log all requests for debugging
+app.use((req, res, next) => {
+  console.log(`Received ${req.method} request for ${req.url}`);
+  next();
+});
 
 // Supabase connection
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -40,8 +45,9 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   });
 
   // Create a post
-  app.post('/api/posts', (req, res) => {
+  app.post('/api/posts', async (req, res) => {
     try {
+      console.log('Creating post:', req.body);
       const { content, author, image } = req.body;
       if (!content && !image) {
         return res.status(400).json({ error: 'Post content or image required' });
@@ -50,7 +56,8 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
         content,
         author,
         timestamp: new Date().toLocaleString(),
-        likes: 0             comments: [],
+        likes: 0,
+        comments: [],
         image
       };
       const { data, error } = await supabase
@@ -70,6 +77,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     try {
       const { id } = req.params;
       const { userId } = req.body;
+      console.log(`Liking post ${id} for user ${userId}`);
       const { data: likedPost, error: fetchError } = await supabase
         .from('liked_posts')
         .select('post_ids')
@@ -109,6 +117,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     try {
       const { id } = req.params;
       const { content, author } = req.body;
+      console.log(`Adding comment to post ${id}`);
       if (!content) {
         return res.status(400).json({ error: 'Comment content required' });
       }
@@ -137,7 +146,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     }
   });
 
-  // Serve static files after API routes
+  // Serve static files
   app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
   // Serve index.html for all non-API routes
@@ -153,5 +162,11 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     });
   });
 }
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err.message, err.stack);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 module.exports = app;
