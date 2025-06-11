@@ -1,120 +1,209 @@
-```javascript
-const express = require('express');
-const mongoose = require('mongoose');
-const app = express();
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SocialSphere</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div id="root"></div>
+    <div id="error" class="hidden error"></div>
 
-app.use(express.json());
-app.use(express.static('public'));
+    <script type="text/babel">
+        try {
+            function App() {
+                const [posts, setPosts] = React.useState([]);
+                const [newPost, setNewPost] = React.useState('');
+                const [username, setUsername] = React.useState('User' + Math.floor(Math.random() * 1000));
+                const [image, setImage] = React.useState(null);
+                const [imagePreview, setImagePreview] = React.useState(null);
+                const [newComments, setNewComments] = React.useState({});
+                const userId = React.useRef('user_' + Math.random().toString(36).substr(2, 9));
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://socialsphere_user:<your-password>@cluster0.abc123.mongodb.net/socialsphere?retryWrites=true&w=majority';
-mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+                // Fetch posts on mount
+                React.useEffect(() => {
+                    fetch('/api/posts')
+                        .then(res => res.json())
+                        .then(data => setPosts(data))
+                        .catch(err => console.error('Error fetching posts:', err));
+                }, []);
 
-// Post schema
-const postSchema = new mongoose.Schema({
-  id: { type: Number, required: true, unique: true },
-  content: String,
-  author: String,
-  timestamp: String,
-  likes: { type: Number, default: 0 },
-  image: String,
-  comments: [{
-    id: Number,
-    content: String,
-    author: String,
-    timestamp: String
-  }]
-});
-const Post = mongoose.model('Post', postSchema);
+                const handleImageChange = (e) => {
+                    const file = e.target.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                        setImage(file);
+                        const reader = new FileReader();
+                        reader.onload = () => setImagePreview(reader.result);
+                        reader.readAsDataURL(file);
+                    } else {
+                        setImage(null);
+                        setImagePreview(null);
+                    }
+                };
 
-// Liked posts schema
-const likedPostSchema = new mongoose.Schema({
-  userId: String,
-  postIds: [Number]
-});
-const LikedPost = mongoose.model('LikedPost', likedPostSchema);
+                const handlePostSubmit = async (e) => {
+                    e.preventDefault();
+                    if (!newPost.trim() && !image) return;
+                    try {
+                        const post = { content: newPost, author: username };
+                        if (image) post.image = imagePreview;
+                        const res = await fetch('/api/posts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(post)
+                        });
+                        if (!res.ok) throw new Error('Failed to create post');
+                        const newPostData = await res.json();
+                        setPosts([newPostData, ...posts]);
+                        setNewPost('');
+                        setImage(null);
+                        setImagePreview(null);
+                    } catch (error) {
+                        console.error('Error posting:', error);
+                        document.getElementById('error').classList.remove('hidden');
+                        document.getElementById('error').textContent = 'Failed to post. Please try again.';
+                    }
+                };
 
-// Get all posts
-app.get('/api/posts', async (req, res) => {
-  try {
-    const posts = await Post.find().sort({ id: -1 });
-    res.json(posts);
-  } catch (error) {
-    res.status(500).json({ error: 'Error fetching posts' });
-  }
-});
+                const handleLike = async (postId) => {
+                    try {
+                        const res = await fetch(`/api/posts/${postId}/like`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: userId.current })
+                        });
+                        if (res.ok) {
+                            setPosts(posts.map(post =>
+                                post.id === postId ? { ...post, likes: post.likes + 1 } : post
+                            ));
+                        }
+                    } catch (error) {
+                        console.error('Error liking post:', error);
+                    }
+                };
 
-// Create a post
-app.post('/api/posts', async (req, res) => {
-  try {
-    const { content, author, image } = req.body;
-    if (!content && !image) {
-      return res.status(400).json({ error: 'Post content or image required' });
-    }
-    const post = new Post({
-      id: Date.now(),
-      content,
-      author,
-      timestamp: new Date().toLocaleString(),
-      likes: 0,
-      comments: [],
-      image
-    });
-    await post.save();
-    res.json(post);
-  } catch (error) {
-    res.status(500).json({ error: 'Error creating post' });
-  }
-});
+                const handleCommentChange = (postId, value) => {
+                    setNewComments({ ...newComments, [postId]: value });
+                };
 
-// Like a post
-app.post('/api/posts/:id/like', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.body;
-    const likedPost = await LikedPost.findOne({ userId });
-    const postIds = likedPost ? likedPost.postIds : [];
-    if (postIds.includes(parseInt(id))) {
-      return res.status(400).json({ error: 'Already liked' });
-    }
-    await Post.findOneAndUpdate({ id: parseInt(id) }, { $inc: { likes: 1 } });
-    if (likedPost) {
-      likedPost.postIds.push(parseInt(id));
-      await likedPost.save();
-    } else {
-      await new LikedPost({ userId, postIds: [parseInt(id)] }).save();
-    }
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Error liking post' });
-  }
-});
+                const handleCommentSubmit = async (postId) => {
+                    const commentText = newComments[postId]?.trim();
+                    if (!commentText) return;
+                    try {
+                        const res = await fetch(`/api/posts/${postId}/comment`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: commentText, author: username })
+                        });
+                        if (!res.ok) throw new Error('Failed to add comment');
+                        const newComment = await res.json();
+                        setPosts(posts.map(post =>
+                            post.id === postId
+                                ? { ...post, comments: [...(post.comments || []), newComment] }
+                                : post
+                        ));
+                        setNewComments({ ...newComments, [postId]: '' });
+                    } catch (error) {
+                        console.error('Error adding comment:', error);
+                    }
+                };
 
-// Add a comment
-app.post('/api/posts/:id/comment', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { content, author } = req.body;
-    if (!content) {
-      return res.status(400).json({ error: 'Comment content required' });
-    }
-    const comment = {
-      id: Date.now(),
-      content,
-      author,
-      timestamp: new Date().toLocaleString()
-    };
-    await Post.findOneAndUpdate(
-      { id: parseInt(id) },
-      { $push: { comments: comment } }
-    );
-    res.json(comment);
-  } catch (error) {
-    res.status(500).json({ error: 'Error adding comment' });
-  }
-});
+                return (
+                    <div className="container">
+                        <h1 className="title">SocialSphere</h1>
+                        
+                        <div className="post-form">
+                            <div>
+                                <textarea
+                                    className="post-input"
+                                    placeholder="What's on your mind?"
+                                    value={newPost}
+                                    onChange={(e) => setNewPost(e.target.value)}
+                                    rows="3"
+                                ></textarea>
+                                <div className="form-footer">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="file-input"
+                                        onChange={handleImageChange}
+                                    />
+                                    {imagePreview && (
+                                        <img
+                                            src={imagePreview}
+                                            alt="Preview"
+                                            className="preview"
+                                        />
+                                    )}
+                                    <div className="form-actions">
+                                        <input
+                                            type="text"
+                                            className="username-input"
+                                            placeholder="Your username"
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value)}
+                                        />
+                                        <button
+                                            type="submit"
+                                            onClick={handlePostSubmit}
+                                            className="post-button"
+                                        >
+                                            Post
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-module.exports = app;
-```
+                        <div className="post-feed">
+                            {posts.map(post => (
+                                <div key={post.id} className="post">
+                                    <div className="post-header">
+                                        <h3 className="author">{post.author}</h3>
+                                        <span className="timestamp">{post.timestamp}</span>
+                                    </div>
+                                    <p className="post-content">{post.content}</p>
+                                    {post.image && (
+                                        <img
+                                            src={post.image}
+                                            alt="Post"
+                                            className="post-image"
+                                        />
+                                    )}
+                                    <div className="post-actions">
+                                        <button
+                                            onClick={() => handleLike(post.id)}
+                                            className="post-button"
+                                        >
+                                            Like ({post.likes})
+                                        </button>
+                                    </div>
+                                    <div className="comment-section">
+                                        <div className="comment-form">
+                                            <input
+                                                type="text"
+                                                className="comment-input"
+                                                placeholder="Post comment..."
+                                                value={newComments[post.id] || ''}
+                                                onChange={(e) => handleCommentChange(post.id, e.target.value)}
+                                            />
+                                            <button
+                                                onClick={() => handleCommentSubmit(post.id)}
+                                                className="comment-button"
+                                            >
+                                                Comment
+                                            </button>
+                                        </div>
+                                        {post.comments && post.comments.length > 0 && (
+                                            <div className="comments-container">
+                                                {post.comments.map(comment => (
+                                                    <div key={comment.id} className="comment">
+                                                        <div className="comment-header">
+                                                            <span className="author">{comment.author}</span>
+                                                            <span className="timestamp">{comment.timestamp}</span>
+                                                        </
