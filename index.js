@@ -1,167 +1,29 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const app = express();
+const port = 3000;
 
-// Middleware
-app.use(express.json());
-
-// Log all requests for debugging
+// Log all requests
 app.use((req, res, next) => {
   console.log(`Received ${req.method} request for ${req.url}`);
   next();
 });
 
-// Supabase connection
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing SUPABASE_URL or SUPABASE_KEY');
-  app.get('*', (req, res) => res.status(500).json({ error: 'Server configuration error' }));
-} else {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  // Health check
-  app.get('/health', (req, res) => {
-    console.log('Health check requested');
-    res.status(200).json({ status: 'OK' });
-  });
-
-  // Get all posts
-  app.get('/api/posts', async (req, res) => {
-    try {
-      console.log('Fetching posts from Supabase');
-      const { data: posts, error } = await supabase
-        .from('posts')
-        .select('*')
-        .order('id', { ascending: false });
-      if (error) throw error;
-      res.json(posts);
-    } catch (error) {
-      console.error('Error fetching posts:', error.message, error.stack);
-      res.status(500).json({ error: 'Error fetching posts' });
+// Serve index.html for all routes
+app.get('*', (req, res) => {
+  console.log(`Attempting to serve index.html for route: ${req.url}`);
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  console.log(`Serving file from: ${indexPath}`);
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error(`Error serving index.html: ${err.message}`);
+      res.status(500).json({ error: 'Failed to serve page' });
     }
   });
-
-  // Create a post
-  app.post('/api/posts', async (req, res) => {
-    try {
-      console.log('Creating post:', req.body);
-      const { content, author, image } = req.body;
-      if (!content && !image) {
-        return res.status(400).json({ error: 'Post content or image required' });
-      }
-      const post = {
-        content,
-        author,
-        timestamp: new Date().toLocaleString(),
-        likes: 0,
-        comments: [],
-        image
-      };
-      const { data, error } = await supabase
-        .from('posts')
-        .insert([post])
-        .select();
-      if (error) throw error;
-      res.json(data[0]);
-    } catch (error) {
-      console.error('Error creating post:', error.message, error.stack);
-      res.status(500).json({ error: 'Error creating post' });
-    }
-  });
-
-  // Like a post
-  app.post('/api/posts/:id/like', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { userId } = req.body;
-      console.log(`Liking post ${id} for user ${userId}`);
-      const { data: likedPost, error: fetchError } = await supabase
-        .from('liked_posts')
-        .select('post_ids')
-        .eq('user_id', userId)
-        .single();
-      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
-      const postIds = likedPost ? likedPost.post_ids : [];
-      if (postIds.includes(parseInt(id))) {
-        return res.status(400).json({ error: 'Already liked' });
-      }
-      const { error: updateError } = await supabase
-        .from('posts')
-        .update({ likes: supabase.raw('likes + 1') })
-        .eq('id', parseInt(id));
-      if (updateError) throw updateError;
-      if (likedPost) {
-        const { error: upsertError } = await supabase
-          .from('liked_posts')
-          .update({ post_ids: [...postIds, parseInt(id)] })
-          .eq('user_id', userId);
-        if (upsertError) throw upsertError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('liked_posts')
-          .insert([{ user_id: userId, post_ids: [parseInt(id)] }]);
-        if (insertError) throw insertError;
-      }
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Error liking post:', error.message, error.stack);
-      res.status(500).json({ error: 'Error liking post' });
-    }
-  });
-
-  // Add a comment
-  app.post('/api/posts/:id/comment', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { content, author } = req.body;
-      console.log(`Adding comment to post ${id}`);
-      if (!content) {
-        return res.status(400).json({ error: 'Comment content required' });
-      }
-      const comment = {
-        id: Date.now(),
-        content,
-        author,
-        timestamp: new Date().toLocaleString()
-      };
-      const { data: post, error: fetchError } = await supabase
-        .from('posts')
-        .select('comments')
-        .eq('id', parseInt(id))
-        .single();
-      if (fetchError) throw fetchError;
-      const updatedComments = [...(post.comments || []), comment];
-      const { error: updateError } = await supabase
-        .from('posts')
-        .update({ comments: updatedComments })
-        .eq('id', parseInt(id));
-      if (updateError) throw updateError;
-      res.json(comment);
-    } catch (error) {
-      console.error('Error adding comment:', error.message, error.stack);
-      res.status(500).json({ error: 'Error adding comment' });
-    }
-  });
-
-  // Serve static files
-  app.use(express.static(path.join(__dirname, 'public'), { index: false }));
-
-  // Serve index.html for all non-API routes
-  app.get('*', (req, res) => {
-    console.log(`Attempting to serve index.html for route: ${req.url}`);
-    const indexPath = path.join(__dirname, 'public', 'index.html');
-    console.log(`Serving file from: ${indexPath}`);
-    res.sendFile(indexPath, (err) => {
-      if (err) {
-        console.error(`Error serving index.html: ${err.message}`);
-        res.status(500).json({ error: 'Failed to serve page' });
-      }
-    });
-  });
-}
+});
 
 // Global error handler
 app.use((err, req, res, next) => {
@@ -169,4 +31,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-module.exports = app;
+// Start server
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
+});
