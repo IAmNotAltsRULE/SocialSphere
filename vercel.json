@@ -1,18 +1,15 @@
-```json
 {
-  "name": "socialsphere",
-  "version": "1.0.0",
-  "description": "A simple social media app",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "express": "^4.17.1",
-    "@supabase/supabase-js": "^2.45.4"
-  },
-  "devDependencies": {
-    "dotenv": "^16.4.5"
-  }
-}
-```
+       "version": 2,
+       "builds": [
+         {
+           "src": "index.js",
+           "use": "@vercel/node"
+         }
+       ],
+       "routes": [
+         {
+           "src": "/(.*)",
+           "dest": "/"
+         }
+       ]
+     }
