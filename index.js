@@ -5,7 +5,6 @@ const app = express();
 
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // Supabase connection
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -18,11 +17,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   // Health check
-  app.get('/health', (req, res) => res.status(200).json({ status: 'OK' }));
+  app.get('/health', (req, res) => {
+    console.log('Health check requested');
+    res.status(200).json({ status: 'OK' });
+  });
 
   // Get all posts
   app.get('/api/posts', async (req, res) => {
     try {
+      console.log('Fetching posts from Supabase');
       const { data: posts, error } = await supabase
         .from('posts')
         .select('*')
@@ -36,7 +39,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   });
 
   // Create a post
-  app.post('/api/posts', async (req, res) => {
+  app.post('/api/posts', (req, res) => {
     try {
       const { content, author, image } = req.body;
       if (!content && !image) {
@@ -46,8 +49,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
         content,
         author,
         timestamp: new Date().toLocaleString(),
-        likes: 0,
-        comments: [],
+        likes: 0             comments: [],
         image
       };
       const { data, error } = await supabase
@@ -134,10 +136,20 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     }
   });
 
+  // Serve static files after API routes
+  app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+
   // Serve index.html for all non-API routes
   app.get('*', (req, res) => {
-    console.log(`Serving index.html for route: ${req.url}`);
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    console.log(`Attempting to serve index.html for route: ${req.url}`);
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    console.log(`Serving file from: ${indexPath}`);
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error(`Error serving index.html: ${err.message}`);
+        res.status(500).json({ error: 'Failed to serve page' });
+      }
+    });
   });
 }
 
