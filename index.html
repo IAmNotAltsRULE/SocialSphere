@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,11 +8,11 @@
     <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="bg-gray-100 font-sans">
+<body>
     <div id="root"></div>
-    <div id="error" className="hidden text-red-500 text-center p-4"></div>
+    <div id="error" class="hidden error"></div>
 
     <script type="text/babel">
         try {
@@ -19,40 +20,18 @@
                 const [posts, setPosts] = React.useState([]);
                 const [newPost, setNewPost] = React.useState('');
                 const [username, setUsername] = React.useState('User' + Math.floor(Math.random() * 1000));
-                const [likedPosts, setLikedPosts] = React.useState(new Set());
                 const [image, setImage] = React.useState(null);
                 const [imagePreview, setImagePreview] = React.useState(null);
                 const [newComments, setNewComments] = React.useState({});
+                const userId = React.useRef('user_' + Math.random().toString(36).substr(2, 9));
 
-                // Load posts and liked posts from localStorage on mount
+                // Fetch posts on mount
                 React.useEffect(() => {
-                    try {
-                        const savedPosts = JSON.parse(localStorage.getItem('posts') || '[]');
-                        setPosts(savedPosts);
-                        const savedLikedPosts = JSON.parse(localStorage.getItem('likedPosts') || '[]');
-                        setLikedPosts(new Set(savedLikedPosts));
-                    } catch (e) {
-                        console.error('Error loading data:', e);
-                    }
+                    fetch('/api/posts')
+                        .then(res => res.json())
+                        .then(data => setPosts(data))
+                        .catch(err => console.error('Error fetching posts:', err));
                 }, []);
-
-                // Save posts to localStorage whenever posts change
-                React.useEffect(() => {
-                    try {
-                        localStorage.setItem('posts', JSON.stringify(posts));
-                    } catch (e) {
-                        console.error('Error saving posts:', e);
-                    }
-                }, [posts]);
-
-                // Save liked posts to localStorage whenever likedPosts change
-                React.useEffect(() => {
-                    try {
-                        localStorage.setItem('likedPosts', JSON.stringify([...likedPosts]));
-                    } catch (e) {
-                        console.error('Error saving liked posts:', e);
-                    }
-                }, [likedPosts]);
 
                 const handleImageChange = (e) => {
                     const file = e.target.files[0];
@@ -67,31 +46,41 @@
                     }
                 };
 
-                const handlePostSubmit = (e) => {
+                const handlePostSubmit = async (e) => {
                     e.preventDefault();
-                    if (newPost.trim() || image) {
-                        const post = {
-                            id: Date.now(),
-                            content: newPost,
-                            author: username,
-                            timestamp: new Date().toLocaleString(),
-                            likes: 0,
-                            image: image ? imagePreview : null,
-                            comments: []
-                        };
-                        setPosts([post, ...posts]);
+                    if (!newPost.trim() && !image) return;
+                    try {
+                        const post = { content: newPost, author: username };
+                        if (image) post.image = imagePreview;
+                        const res = await fetch('/api/posts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(post)
+                        });
+                        const newPostData = await res.json();
+                        setPosts([newPostData, ...posts]);
                         setNewPost('');
                         setImage(null);
                         setImagePreview(null);
+                    } catch (error) {
+                        console.error('Error posting:', error);
                     }
                 };
 
-                const handleLike = (postId) => {
-                    if (!likedPosts.has(postId)) {
-                        setPosts(posts.map(post =>
-                            post.id === postId ? { ...post, likes: post.likes + 1 } : post
-                        ));
-                        setLikedPosts(new Set(likedPosts).add(postId));
+                const handleLike = async (postId) => {
+                    try {
+                        const res = await fetch(`/api/posts/${postId}/like`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: userId.current })
+                        });
+                        if (res.ok) {
+                            setPosts(posts.map(post =>
+                                post.id === postId ? { ...post, likes: post.likes + 1 } : post
+                            ));
+                        }
+                    } catch (error) {
+                        console.error('Error liking post:', error);
                     }
                 };
 
@@ -99,57 +88,59 @@
                     setNewComments({ ...newComments, [postId]: value });
                 };
 
-                const handleCommentSubmit = (postId) => {
+                const handleCommentSubmit = async (postId) => {
                     const commentText = newComments[postId]?.trim();
-                    if (commentText) {
-                        const comment = {
-                            id: Date.now(),
-                            content: commentText,
-                            author: username,
-                            timestamp: new Date().toLocaleString()
-                        };
+                    if (!commentText) return;
+                    try {
+                        const res = await fetch(`/api/posts/${postId}/comment`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: commentText, author: username })
+                        });
+                        const newComment = await res.json();
                         setPosts(posts.map(post =>
                             post.id === postId
-                                ? { ...post, comments: [...(post.comments || []), comment] }
+                                ? { ...post, comments: [...(post.comments || []), newComment] }
                                 : post
                         ));
                         setNewComments({ ...newComments, [postId]: '' });
+                    } catch (error) {
+                        console.error('Error adding comment:', error);
                     }
                 };
 
                 return (
-                    <div className="max-w-2xl mx-auto p-4">
-                        <h1 className="text-3xl font-bold mb-6 text-center">SocialSphere</h1>
+                    <div className="container">
+                        <h1 className="title">SocialSphere</h1>
                         
                         {/* Post Creation Form */}
-                        <div className="bg-white p-4 rounded-lg shadow mb-6">
+                        <div className="post-form">
                             <div>
                                 <textarea
-                                    className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="post-input"
                                     placeholder="What's on your mind?"
                                     value={newPost}
                                     onChange={(e) => setNewPost(e.target.value)}
                                     rows="3"
                                 ></textarea>
-                                <div className="flex flex-col space-y-2 mt-2">
+                                <div className="form-footer">
                                     <input
                                         type="file"
                                         accept="image/*"
-                                        className="border rounded-lg p-2"
+                                        className="file-input"
                                         onChange={handleImageChange}
                                     />
                                     {imagePreview && (
                                         <img
                                             src={imagePreview}
                                             alt="Preview"
-                                            className="max-w-full h-auto rounded-lg mt-2"
-                                            style={{ maxHeight: '200px' }}
+                                            className="preview"
                                         />
                                     )}
-                                    <div className="flex justify-between items-center">
+                                    <div className="form-actions">
                                         <input
                                             type="text"
-                                            className="p-2 border rounded-lg"
+                                            className="username-input"
                                             placeholder="Your username"
                                             value={username}
                                             onChange={(e) => setUsername(e.target.value)}
@@ -157,7 +148,7 @@
                                         <button
                                             type="submit"
                                             onClick={handlePostSubmit}
-                                            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                                            className="post-button"
                                         >
                                             Post
                                         </button>
@@ -167,58 +158,55 @@
                         </div>
 
                         {/* Post Feed */}
-                        <div className="space-y-4">
+                        <div className="post-feed">
                             {posts.map(post => (
-                                <div key={post.id} className="bg-white p-4 rounded-lg shadow">
-                                    <div className="flex justify-between items-center">
-                                        <h3 className="font-semibold">{post.author}</h3>
-                                        <span className="text-gray-500 text-sm">{post.timestamp}</span>
+                                <div key={post.id} className="post">
+                                    <div className="post-header">
+                                        <h3 className="author">{post.author}</h3>
+                                        <span className="timestamp">{post.timestamp}</span>
                                     </div>
-                                    <p className="mt-2">{post.content}</p>
+                                    <p className="post-content">{post.content}</p>
                                     {post.image && (
                                         <img
                                             src={post.image}
                                             alt="Post"
-                                            className="max-w-full h-auto rounded-lg mt-2"
-                                            style={{ maxHeight: '300px' }}
+                                            className="post-image"
                                         />
                                     )}
-                                    <div className="mt-2 flex items-center">
+                                    <div className="post-actions">
                                         <button
                                             onClick={() => handleLike(post.id)}
-                                            className={`px-2 py-1 rounded ${likedPosts.has(post.id) ? 'text-gray-400 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700'}`}
-                                            disabled={likedPosts.has(post.id)}
+                                            className="like-button"
                                         >
                                             Like ({post.likes})
                                         </button>
                                     </div>
                                     {/* Comment Section */}
-                                    <div className="mt-4">
-                                        <div className="flex space-x-2">
+                                    <div className="comment-section">
+                                        <div className="comment-form">
                                             <input
                                                 type="text"
-                                                className="flex-grow p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="comment-input"
                                                 placeholder="Write a comment..."
                                                 value={newComments[post.id] || ''}
                                                 onChange={(e) => handleCommentChange(post.id, e.target.value)}
                                             />
                                             <button
                                                 onClick={() => handleCommentSubmit(post.id)}
-                                                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                                                className="comment-button"
                                             >
                                                 Comment
                                             </button>
                                         </div>
-                                        {/* Comment List */}
                                         {post.comments && post.comments.length > 0 && (
-                                            <div className="mt-2 space-y-2">
+                                            <div className="comment-list">
                                                 {post.comments.map(comment => (
-                                                    <div key={comment.id} className="bg-gray-50 p-2 rounded-lg">
-                                                        <div className="flex justify-between items-center">
-                                                            <span className="font-semibold text-sm">{comment.author}</span>
-                                                            <span className="text-gray-500 text-xs">{comment.timestamp}</span>
+                                                    <div key={comment.id} className="comment">
+                                                        <div className="comment-header">
+                                                            <span className="author">{comment.author}</span>
+                                                            <span className="timestamp">{comment.timestamp}</span>
                                                         </div>
-                                                        <p className="text-sm">{comment.content}</p>
+                                                        <p className="comment-content">{comment.content}</p>
                                                     </div>
                                                 ))}
                                             </div>
@@ -240,3 +228,4 @@
     </script>
 </body>
 </html>
+```
