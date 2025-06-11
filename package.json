@@ -9,7 +9,10 @@
   },
   "dependencies": {
     "express": "^4.17.1",
-    "mongoose": "^8.0.0"
+    "@supabase/supabase-js": "^2.45.4"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5"
   }
 }
 ```
