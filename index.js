@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
@@ -5,23 +6,20 @@ const app = express();
 
 // Middleware
 app.use(express.json());
-app.use(express.static', path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // Supabase connection
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing SUPABASE_URL or SUPABASE_KEY environment variables');
-  app.get('*', (req, res) => {
-    res.status(500).json({ error: 'Server configuration error' });
+  console.error('Missing SUPABASE_URL or SUPABASE_KEY');
+  app.get('*', (req, res) => res.status(500).json({ error: 'Server configuration error' }));
 } else {
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   // Health check
-  app.get('/healthcheck', (req, res) => {
-    res.status(200).json({ status: 'OK' });
-  });
+  app.get('/health', (req, res) => res.status(200).json({ status: 'OK' }));
 
   // Get all posts
   app.get('/api/posts', async (req, res) => {
@@ -45,7 +43,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
       if (!content && !image) {
         return res.status(400).json({ error: 'Post content or image required' });
       }
-      const post = ({
+      const post = {
         content,
         author,
         timestamp: new Date().toLocaleString(),
@@ -139,7 +137,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
   // Serve index.html for all non-API routes
   app.get('*', (req, res) => {
-    console.log('Request for route:', req.url);
+    console.log(`Serving index.html for route: ${req.url}`);
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   });
 }
