@@ -8,7 +8,7 @@ body {
 }
 
 .container {
-  max-width: 672px; /* 2xl equivalent */
+  max-width: 672px;
   margin: 0 auto;
   padding: 16px;
 }
@@ -29,7 +29,7 @@ body {
   margin-bottom: 24px;
 }
 
-.post-form textarea {
+.post-input {
   width: 100%;
   padding: 8px;
   border: 1px solid #d1d5db;
@@ -39,19 +39,19 @@ body {
   outline: none;
 }
 
-.post-form textarea:focus {
+.post-input:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
 
-.post-form input[type="file"] {
+.file-input {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   padding: 8px;
   margin-top: 8px;
 }
 
-.post-form img.preview {
+.preview {
   max-width: 100%;
   max-height: 200px;
   border-radius: 8px;
@@ -65,7 +65,13 @@ body {
   margin-top: 8px;
 }
 
-.form-footer input[type="text"] {
+.form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.username-input {
   padding: 8px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -104,11 +110,11 @@ body {
   align-items: center;
 }
 
-.post-header .author {
+.author {
   font-weight: 600;
 }
 
-.post-header .timestamp {
+.timestamp {
   color: #6b7280;
   font-size: 12px;
 }
@@ -151,7 +157,7 @@ body {
   gap: 8px;
 }
 
-.comment-form input[type="text"] {
+.comment-input {
   flex-grow: 1;
   padding: 8px;
   border: 1px solid #d1d5db;
@@ -159,7 +165,7 @@ body {
   outline: none;
 }
 
-.comment-form input[type="text"]:focus {
+.comment-input:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
@@ -177,7 +183,7 @@ body {
   background-color: #2563eb;
 }
 
-.comment-list {
+.comments-container {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
@@ -206,7 +212,7 @@ body {
   font-size: 10px;
 }
 
-.comment-content {
+.comment-text {
   font-size: 14px;
 }
 
