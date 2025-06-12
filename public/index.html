@@ -22,40 +22,7 @@
       const [preview, setPreview] = useState(null);
       const [commentContent, setCommentContent] = useState({});
       const [commentAuthor, setCommentAuthor] = useState({});
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  console.log('Submitting post:', { content, author, image });
-  if (!content && !image) {
-    console.error('No content or image provided');
-    return;
-  }
-  try {
-    const response = await fetch('/api/posts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content,
-        author: author || 'Anonymous',
-        image: image ? URL.createObjectURL(image) : null
-      })
-    });
-    console.log('Response status:', response.status);
-    const text = await response.text();
-    console.log('Raw response:', text);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${text}`);
-    }
-    const newPost = JSON.parse(text);
-    console.log('Post created:', newPost);
-    setPosts([newPost, ...posts]);
-    setContent('');
-    setAuthor('');
-    setImage(null);
-    setPreview(null);
-  } catch (error) {
-    console.error('Error creating post:', error.message);
-  }
-};
+
       useEffect(() => {
         fetchPosts();
       }, []);
@@ -72,12 +39,11 @@ const handleSubmit = async (e) => {
 
       const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!content && !image) return;
-        const formData = new FormData();
-        formData.append('content', content);
-        formData.append('author', author || 'Anonymous');
-        if (image) formData.append('image', image);
-
+        console.log('Submitting post:', { content, author, image });
+        if (!content && !image) {
+          console.error('No content or image provided');
+          return;
+        }
         try {
           const response = await fetch('/api/posts', {
             method: 'POST',
@@ -88,14 +54,21 @@ const handleSubmit = async (e) => {
               image: image ? URL.createObjectURL(image) : null
             })
           });
-          const newPost = await response.json();
+          console.log('Response status:', response.status);
+          const text = await response.text();
+          console.log('Raw response:', text);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${text}`);
+          }
+          const newPost = JSON.parse(text);
+          console.log('Post created:', newPost);
           setPosts([newPost, ...posts]);
           setContent('');
           setAuthor('');
           setImage(null);
           setPreview(null);
         } catch (error) {
-          console.error('Error creating post:', error);
+          console.error('Error creating post:', error.message);
         }
       };
 
@@ -201,7 +174,7 @@ const handleSubmit = async (e) => {
                   {(post.comments || []).map(comment => (
                     <div key={comment.id} className="comment">
                       <div className="comment-header">
-                        <span className="comment-author">{comment.author}</span>
+                        <span className="post-author">{comment.author}</span>
                         <span className="comment-timestamp">{comment.timestamp}</span>
                       </div>
                       <div className="comment-content">{comment.content}</div>
