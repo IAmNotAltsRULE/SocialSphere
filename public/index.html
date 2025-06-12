@@ -1,85 +1,211 @@
-/* General styles */
-body {
-  background-color: #f3f4f6;
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 0;
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SocialSphere</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-.container {
-  max-width: 672px;
-  margin: 0 auto;
-  padding: 16px;
-}
+    const App = () => {
+      const [posts, setPosts] = useState([]);
+      const [content, setContent] = useState('');
+      const [author, setAuthor] = useState('');
+      const [image, setImage] = useState(null);
+      const [preview, setPreview] = useState(null);
+      const [commentContent, setCommentContent] = useState({});
+      const [commentAuthor, setCommentAuthor] = useState({});
 
-.title {
-  font-size: 24px;
-  font-weight: bold;
-  margin-bottom: 24px;
-  text-align: center;
-}
+      useEffect(() => {
+        fetchPosts();
+      }, []);
 
-/* Post creation form */
-.post-form {
-  background-color: white;
-  padding: 16px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
-}
+      const fetchPosts = async () => {
+        try {
+          const response = await fetch('/api/posts');
+          const data = await response.json();
+          setPosts(data);
+        } catch (error) {
+          console.error('Error fetching posts:', error);
+        }
+      };
 
-.post-input {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  resize: vertical;
-  min-height: 72px;
-  outline: none;
-}
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!content && !image) return;
+        const formData = new FormData();
+        formData.append('content', content);
+        formData.append('author', author || 'Anonymous');
+        if (image) formData.append('image', image);
 
-.post-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-}
+        try {
+          const response = await fetch('/api/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content,
+              author: author || 'Anonymous',
+              image: image ? URL.createObjectURL(image) : null
+            })
+          });
+          const newPost = await response.json();
+          setPosts([newPost, ...posts]);
+          setContent('');
+          setAuthor('');
+          setImage(null);
+          setPreview(null);
+        } catch (error) {
+          console.error('Error creating post:', error);
+        }
+      };
 
-.file-input {
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 8px;
-  margin-top: 8px;
-}
+      const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          setImage(file);
+          setPreview(URL.createObjectURL(file));
+        }
+      };
 
-.preview {
-  max-width: 100%;
-  max-height: 200px;
-  border-radius: 8px;
-  margin-top: 8px;
-}
+      const handleLike = async (postId) => {
+        try {
+          const userId = 'user-' + Math.random().toString(36).substr(2, 9);
+          const response = await fetch(`/api/posts/${postId}/like`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+          });
+          if (response.ok) {
+            setPosts(posts.map(post =>
+              post.id === postId ? { ...post, likes: post.likes + 1 } : post
+            ));
+          }
+        } catch (error) {
+          console.error('Error liking post:', error);
+        }
+      };
 
-.form-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 8px;
-}
+      const handleCommentSubmit = async (postId, e) => {
+        e.preventDefault();
+        if (!commentContent[postId]) return;
+        try {
+          const response = await fetch(`/api/posts/${postId}/comment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: commentContent[postId],
+              author: commentAuthor[postId] || 'Anonymous'
+            })
+          });
+          const newComment = await response.json();
+          setPosts(posts.map(post =>
+            post.id === postId
+              ? { ...post, comments: [...(post.comments || []), newComment] }
+              : post
+          ));
+          setCommentContent({ ...commentContent, [postId]: '' });
+          setCommentAuthor({ ...commentAuthor, [postId]: '' });
+        } catch (error) {
+          console.error('Error adding comment:', error);
+        }
+      };
 
-.form-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
+      return (
+        <div className="container">
+          <h1 className="title">SocialSphere</h1>
+          <form className="post-form" onSubmit={handleSubmit}>
+            <textarea
+              className="post-input"
+              placeholder="What's on your mind?"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+            />
+            <input
+              type="file"
+              className="file-input"
+              accept="image/*"
+              onChange={handleImageChange}
+            />
+            {preview && <img src={preview} alt="Preview" className="preview" />}
+            <div className="form-footer">
+              <input
+                type="text"
+                className="username-input"
+                placeholder="Your name (optional)"
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+              />
+              <div className="form-actions">
+                <button type="submit" className="post-button">Post</button>
+              </div>
+            </div>
+          </form>
+          <div className="posts">
+            {posts.map(post => (
+              <div key={post.id} className="post">
+                <div className="post-header">
+                  <span className="post-author">{post.author}</span>
+                  <span className="post-timestamp">{post.timestamp}</span>
+                </div>
+                <div className="post-content">{post.content}</div>
+                {post.image && <img src={post.image} alt="Post" className="post-image" />}
+                <div className="post-actions">
+                  <button
+                    className="like-button"
+                    onClick={() => handleLike(post.id)}
+                  >
+                    Like ({post.likes})
+                  </button>
+                </div>
+                <div className="comments">
+                  {(post.comments || []).map(comment => (
+                    <div key={comment.id} className="comment">
+                      <div className="comment-header">
+                        <span className="comment-author">{comment.author}</span>
+                        <span className="comment-timestamp">{comment.timestamp}</span>
+                      </div>
+                      <div className="comment-content">{comment.content}</div>
+                    </div>
+                  ))}
+                  <form
+                    className="comment-form"
+                    onSubmit={(e) => handleCommentSubmit(post.id, e)}
+                  >
+                    <input
+                      type="text"
+                      className="comment-input"
+                      placeholder="Your name (optional)"
+                      value={commentAuthor[post.id] || ''}
+                      onChange={(e) =>
+                        setCommentAuthor({ ...commentAuthor, [post.id]: e.target.value })
+                      }
+                    />
+                    <textarea
+                      className="comment-input"
+                      placeholder="Add a comment..."
+                      value={commentContent[post.id] || ''}
+                      onChange={(e) =>
+                        setCommentContent({ ...commentContent, [post.id]: e.target.value })
+                      }
+                    />
+                    <button type="submit" className="comment-button">Comment</button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
 
-.username-input {
-  padding: 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-}
-
-.post-button {
-  background-color: #3b82f6;
-  color: white;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
