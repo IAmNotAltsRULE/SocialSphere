@@ -22,7 +22,40 @@
       const [preview, setPreview] = useState(null);
       const [commentContent, setCommentContent] = useState({});
       const [commentAuthor, setCommentAuthor] = useState({});
-
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  console.log('Submitting post:', { content, author, image });
+  if (!content && !image) {
+    console.error('No content or image provided');
+    return;
+  }
+  try {
+    const response = await fetch('/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content,
+        author: author || 'Anonymous',
+        image: image ? URL.createObjectURL(image) : null
+      })
+    });
+    console.log('Response status:', response.status);
+    const text = await response.text();
+    console.log('Raw response:', text);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${text}`);
+    }
+    const newPost = JSON.parse(text);
+    console.log('Post created:', newPost);
+    setPosts([newPost, ...posts]);
+    setContent('');
+    setAuthor('');
+    setImage(null);
+    setPreview(null);
+  } catch (error) {
+    console.error('Error creating post:', error.message);
+  }
+};
       useEffect(() => {
         fetchPosts();
       }, []);
