@@ -3,6 +3,9 @@ const path = require('path');
 const app = express();
 const port = 3000;
 
+// Log server start
+console.log('Starting server...');
+
 // Log all requests
 app.use((req, res, next) => {
   console.log(`Received ${req.method} request for ${req.url}`);
@@ -32,6 +35,19 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+app.listen(port, (err) => {
+  if (err) {
+    console.error('Failed to start server:', err.message);
+  } else {
+    console.log(`Server running at http://localhost:${port}`);
+  }
+});
+
+// Log uncaught errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err.message, err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
