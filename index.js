@@ -1,53 +1,46 @@
 const express = require('express');
-const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
+
 const app = express();
-const port = 3000;
+app.use(express.json());
 
-// Log server start
-console.log('Starting server...');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Log all requests
-app.use((req, res, next) => {
-  console.log(`Received ${req.method} request for ${req.url}`);
-  next();
-});
-
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
-
-// Serve index.html for all routes
-app.get('*', (req, res) => {
-  console.log(`Attempting to serve index.html for route: ${req.url}`);
-  const indexPath = path.join(__dirname, 'public', 'index.html');
-  console.log(`Serving file from: ${indexPath}`);
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      console.error(`Error serving index.html: ${err.message}`);
-      res.status(500).json({ error: 'Failed to serve page' });
+// Create a post
+app.post('/api/posts', async (req, res) => {
+  try {
+    console.log('Creating post:', req.body);
+    const { content, author, image } = req.body;
+    if (!content && !image) {
+      return res.status(400).json({ error: 'Post content or image required' });
     }
-  });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Server error:', err.message, err.stack);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-// Start server
-app.listen(port, (err) => {
-  if (err) {
-    console.error('Failed to start server:', err.message);
-  } else {
-    console.log(`Server running at http://localhost:${port}`);
+    const post = {
+      content,
+      author,
+      timestamp: new Date().toLocaleString(),
+      likes: 0,
+      comments: [],
+      image
+    };
+    const { data, error } = await supabase
+      .from('posts')
+      .insert([post])
+      .select();
+    if (error) throw error;
+    res.json(data[0]);
+  } catch (error) {
+    console.error('Error creating post:', error.message, error.stack);
+    res.status(500).json({ error: 'Error creating post' });
   }
 });
 
-// Log uncaught errors
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err.message, err.stack);
+// Other routes (like, comment) if needed
+app.get('*', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
 });
