@@ -8,14 +8,19 @@
   <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    const supabase = window.supabase.createClient(
+      'https://dpevyxvwsfghizsktklb.supabase.co',
+      'your-anon-public-key' // Replace with your Supabase anon key from dashboard
+    );
+
     const App = () => {
-      console.log('Rendering App'); // Debug log
       const [posts, setPosts] = useState([]);
       const [content, setContent] = useState('');
       const [author, setAuthor] = useState('');
@@ -30,48 +35,22 @@
 
       const fetchPosts = async () => {
         try {
-          const response = await fetch('/api/posts');
-          const data = await response.json();
-          console.log('Fetched posts:', data);
+          const { data, error } = await supabase.from('posts').select('*');
+          if (error) throw error;
           setPosts(data);
         } catch (error) {
-          console.error('Error fetching posts:', error);
+          console.error('Error fetching posts:', error.message);
         }
       };
 
       const handleSubmit = async (e) => {
         e.preventDefault();
-        console.log('Submitting post:', { content, author, image });
-        if (!content && !image) {
-          console.error('No content or image provided');
-          return;
-        }
-        try {
-          const response = await fetch('/api/posts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content,
-              author: author || 'Anonymous',
-              image: image ? URL.createObjectURL(image) : null
-            })
-          });
-          console.log('Response status:', response.status);
-          const text = await response.text();
-          console.log('Raw response:', text);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${text}`);
-          }
-          const newPost = JSON.parse(text);
-          console.log('Post created:', newPost);
-          setPosts([newPost, ...posts]);
-          setContent('');
-          setAuthor('');
-          setImage(null);
-          setPreview(null);
-        } catch (error) {
-          console.error('Error creating post:', error.message);
-        }
+        if (!content && !image) return;
+        const post = { content, author: author || 'Anonymous', image: image ? URL.createObjectURL(image) : null };
+        const { data, error } = await supabase.from('posts').insert([post]).select();
+        if (error) console.error('Error creating post:', error.message);
+        else setPosts([data[0], ...posts]);
+        setContent(''); setAuthor(''); setImage(null); setPreview(null);
       };
 
       const handleImageChange = (e) => {
@@ -83,51 +62,28 @@
       };
 
       const handleLike = async (postId) => {
-        try {
-          const userId = 'user-' + Math.random().toString(36).substr(2, 9);
-          const response = await fetch(`/api/posts/${postId}/like`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId })
-          });
-          if (response.ok) {
-            setPosts(posts.map(post =>
-              post.id === postId ? { ...post, likes: post.likes + 1 } : post
-            ));
-          } else {
-            console.error('Like failed:', await response.text());
-          }
-        } catch (error) {
-          console.error('Error liking post:', error);
-        }
+        const { data, error } = await supabase
+          .from('posts')
+          .update({ likes: (posts.find(p => p.id === postId)?.likes || 0) + 1 })
+          .eq('id', postId)
+          .select();
+        if (error) console.error('Error liking post:', error.message);
+        else setPosts(posts.map(p => p.id === postId ? data[0] : p));
       };
 
       const handleCommentSubmit = async (postId, e) => {
         e.preventDefault();
         if (!commentContent[postId]) return;
-        try {
-          const response = await fetch(`/api/posts/${postId}/comment`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: commentContent[postId],
-              author: commentAuthor[postId] || 'Anonymous'
-            })
-          });
-          if (!response.ok) {
-            console.error('Comment failed:', await response.text());
-            return;
-          }
-          const newComment = await response.json();
-          setPosts(posts.map(post =>
-            post.id === postId
-              ? { ...post, comments: [...(post.comments || []), newComment] }
-              : post
-          ));
+        const { data, error } = await supabase
+          .from('posts')
+          .update({ comments: [...(posts.find(p => p.id === postId)?.comments || []), { id: Date.now(), content: commentContent[postId], author: commentAuthor[postId] || 'Anonymous', timestamp: new Date().toLocaleString() }] })
+          .eq('id', postId)
+          .select();
+        if (error) console.error('Error adding comment:', error.message);
+        else {
+          setPosts(posts.map(p => p.id === postId ? data[0] : p));
           setCommentContent({ ...commentContent, [postId]: '' });
           setCommentAuthor({ ...commentAuthor, [postId]: '' });
-        } catch (error) {
-          console.error('Error adding comment:', error);
         }
       };
 
@@ -135,27 +91,11 @@
         <div className="container">
           <h1 className="title">SocialSphere</h1>
           <form className="post-form" onSubmit={handleSubmit}>
-            <textarea
-              className="post-input"
-              placeholder="What's on your mind?"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-            />
-            <input
-              type="file"
-              className="file-input"
-              accept="image/*"
-              onChange={handleImageChange}
-            />
+            <textarea className="post-input" placeholder="What's on your mind?" value={content} onChange={(e) => setContent(e.target.value)} />
+            <input type="file" className="file-input" accept="image/*" onChange={handleImageChange} />
             {preview && <img src={preview} alt="Preview" className="preview" />}
             <div className="form-footer">
-              <input
-                type="text"
-                className="username-input"
-                placeholder="Your name (optional)"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-              />
+              <input type="text" className="username-input" placeholder="Your name (optional)" value={author} onChange={(e) => setAuthor(e.target.value)} />
               <div className="form-actions">
                 <button type="submit" className="post-button">Post</button>
               </div>
@@ -171,12 +111,7 @@
                 <div className="post-content">{post.content}</div>
                 {post.image && <img src={post.image} alt="Post" className="post-image" />}
                 <div className="post-actions">
-                  <button
-                    className="like-button"
-                    onClick={() => handleLike(post.id)}
-                  >
-                    Like ({post.likes})
-                  </button>
+                  <button className="like-button" onClick={() => handleLike(post.id)}>Like ({post.likes || 0})</button>
                 </div>
                 <div className="comments">
                   {(post.comments || []).map(comment => (
@@ -188,27 +123,9 @@
                       <div className="comment-content">{comment.content}</div>
                     </div>
                   ))}
-                  <form
-                    className="comment-form"
-                    onSubmit={(e) => handleCommentSubmit(post.id, e)}
-                  >
-                    <input
-                      type="text"
-                      className="comment-input"
-                      placeholder="Your name (optional)"
-                      value={commentAuthor[post.id] || ''}
-                      onChange={(e) =>
-                        setCommentAuthor({ ...commentAuthor, [post.id]: e.target.value })
-                      }
-                    />
-                    <textarea
-                      className="comment-input"
-                      placeholder="Add a comment..."
-                      value={commentContent[post.id] || ''}
-                      onChange={(e) =>
-                        setCommentContent({ ...commentContent, [post.id]: e.target.value })
-                      }
-                    />
+                  <form className="comment-form" onSubmit={(e) => handleCommentSubmit(post.id, e)}>
+                    <input type="text" className="comment-input" placeholder="Your name (optional)" value={commentAuthor[post.id] || ''} onChange={(e) => setCommentAuthor({ ...commentAuthor, [post.id]: e.target.value })} />
+                    <textarea className="comment-input" placeholder="Add a comment..." value={commentContent[post.id] || ''} onChange={(e) => setCommentContent({ ...commentContent, [post.id]: e.target.value })} />
                     <button type="submit" className="comment-button">Comment</button>
                   </form>
                 </div>
